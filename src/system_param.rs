@@ -5,6 +5,7 @@ use std::ops::{Deref, DerefMut};
 use bevy::{
     ecs::{
         component::{ComponentId, Tick},
+        query::FilteredAccessSet,
         system::{ReadOnlySystemParam, SystemMeta, SystemParam},
         world::unsafe_world_cell::UnsafeWorldCell,
     },
@@ -33,8 +34,17 @@ unsafe impl<T: Atmospheric> SystemParam for Atmosphere<'_, T> {
     type State = ComponentId;
     type Item<'w, 's> = Atmosphere<'w, T>;
 
-    fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
-        Res::<AtmosphereModel>::init_state(world, system_meta)
+    fn init_state(world: &mut World) -> Self::State {
+        Res::<AtmosphereModel>::init_state(world)
+    }
+
+    fn init_access(
+        state: &Self::State,
+        system_meta: &mut SystemMeta,
+        component_access_set: &mut FilteredAccessSet,
+        world: &mut World,
+    ) {
+        Res::<AtmosphereModel>::init_access(state, system_meta, component_access_set, world)
     }
 
     #[inline]
@@ -81,8 +91,17 @@ unsafe impl<T: Atmospheric> SystemParam for AtmosphereMut<'_, T> {
     type State = ComponentId;
     type Item<'w, 's> = AtmosphereMut<'w, T>;
 
-    fn init_state(world: &mut World, system_meta: &mut SystemMeta) -> Self::State {
-        ResMut::<AtmosphereModel>::init_state(world, system_meta)
+    fn init_state(world: &mut World) -> Self::State {
+        ResMut::<AtmosphereModel>::init_state(world)
+    }
+
+    fn init_access(
+        state: &Self::State,
+        system_meta: &mut SystemMeta,
+        component_access_set: &mut FilteredAccessSet,
+        world: &mut World,
+    ) {
+        ResMut::<AtmosphereModel>::init_access(state, system_meta, component_access_set, world)
     }
 
     #[inline]

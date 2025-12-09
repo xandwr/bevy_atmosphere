@@ -2,8 +2,10 @@
 
 use bevy::{
     asset::load_internal_asset,
+    camera::visibility::RenderLayers,
+    light::NotShadowCaster,
     prelude::*,
-    render::{view::RenderLayers, RenderApp},
+    render::RenderApp,
 };
 
 use crate::{
@@ -13,11 +15,6 @@ use crate::{
 
 #[cfg(feature = "detection")]
 use crate::settings::{AtmosphereSettings, SkyboxCreationMode};
-#[cfg(feature = "detection")]
-use bevy::{
-    pbr::{NotShadowCaster, NotShadowReceiver},
-    render::camera::CameraProjection as _,
-};
 
 #[cfg(any(feature = "gradient", feature = "nishita"))]
 use crate::model::AddAtmosphereModel as _;
@@ -137,8 +134,7 @@ fn atmosphere_insert(
                     Mesh3d(mesh_assets.add(crate::skybox::mesh(far_size))),
                     MeshMaterial3d(material.0.clone()),
                     AtmosphereSkyBox,
-                    NotShadowCaster,
-                    NotShadowReceiver,
+                    NotShadowCaster, // Prevent skybox from blocking directional light shadows
                 ));
 
                 if let AtmosphereCamera {

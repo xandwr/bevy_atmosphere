@@ -142,7 +142,10 @@ pub fn derive_atmospheric(ast: syn::DeriveInput) -> Result<TokenStream> {
         },
         ShaderPathType::Internal(s) => quote! {
             {
-                let handle: #asset_path::Handle<Shader> = #asset_path::Handle::weak_from_u128(#id as u128);
+                let handle: #asset_path::Handle<Shader> = #asset_path::Handle::Uuid(
+                    #asset_path::uuid::Uuid::from_u128(#id as u128),
+                    core::marker::PhantomData
+                );
 
                 let internal_handle = handle.clone();
                 #asset_path::load_internal_asset!(
@@ -466,7 +469,7 @@ pub fn derive_atmospheric(ast: syn::DeriveInput) -> Result<TokenStream> {
                     push_constant_ranges: vec![],
                     shader: handle,
                     shader_defs: vec![],
-                    entry_point: Cow::from("main"),
+                    entry_point: Some(Cow::from("main")),
                     zero_initialize_workgroup_memory: true,
                 });
 

@@ -5,11 +5,12 @@
 use std::ops::Deref;
 
 use bevy::{
+    asset::RenderAssetUsages,
     prelude::*,
     render::{
         extract_resource::{ExtractResource, ExtractResourcePlugin},
         graph::CameraDriverLabel,
-        render_asset::{RenderAssetUsages, RenderAssets},
+        render_asset::RenderAssets,
         render_graph::{self, RenderGraph, RenderLabel},
         render_resource::{
             BindGroup, BindGroupEntries, BindGroupLayout, BindGroupLayoutEntry, BindingResource,
@@ -19,7 +20,7 @@ use bevy::{
         },
         renderer::RenderDevice,
         texture::{FallbackImage, GpuImage},
-        Extract, Render, RenderApp, RenderSet,
+        Extract, Render, RenderApp, RenderSystems,
     },
 };
 
@@ -77,7 +78,7 @@ impl FromWorld for AtmosphereImageBindGroupLayout {
 }
 
 /// Signals the pipeline (inside `RenderApp`) to render the atmosphere.
-#[derive(Debug, Clone, Copy, Event)]
+#[derive(Debug, Clone, Copy, Message)]
 pub struct AtmosphereUpdateEvent;
 
 #[derive(Resource, Debug, Clone)]
@@ -138,14 +139,14 @@ impl Plugin for AtmospherePipelinePlugin {
             .insert_resource(settings)
             .insert_resource(AtmosphereTypeRegistry(type_registry))
             .init_resource::<CachedAtmosphereModelMetadata>()
-            .init_resource::<Events<AtmosphereUpdateEvent>>()
+            .init_resource::<Messages<AtmosphereUpdateEvent>>()
             .add_systems(ExtractSchedule, extract_atmosphere_resources)
             .add_systems(
                 Render,
                 (
-                    prepare_atmosphere_resources.in_set(RenderSet::PrepareResources),
-                    prepare_atmosphere_bind_group.in_set(RenderSet::PrepareBindGroups),
-                    clear_update_events.in_set(RenderSet::Cleanup),
+                    prepare_atmosphere_resources.in_set(RenderSystems::PrepareResources),
+                    prepare_atmosphere_bind_group.in_set(RenderSystems::PrepareBindGroups),
+                    clear_update_events.in_set(RenderSystems::Cleanup),
                 ),
             );
 
@@ -322,12 +323,12 @@ pub const ATMOSPHERE_IMAGE_TEXTURE_DESCRIPTOR: fn(u32) -> TextureDescriptor<'sta
 
 /// Whenever settings changed, the texture view needs to be updated to use the new texture.
 fn prepare_atmosphere_resources(
-    mut update_events: ResMut<Events<AtmosphereUpdateEvent>>,
+    mut update_events: ResMut<Messages<AtmosphereUpdateEvent>>,
     mut atmosphere_image: ResMut<AtmosphereImage>,
     gpu_images: Res<RenderAssets<GpuImage>>,
     atmosphere: Res<AtmosphereModel>,
 ) {
-    let mut update = || update_events.send(AtmosphereUpdateEvent);
+    let mut update = || update_events.write(AtmosphereUpdateEvent);
 
     if atmosphere_image.array_view.is_none() {
         let _prepare_atmosphere_assets_executed_span = info_span!(
@@ -470,8 +471,8 @@ impl render_graph::Node for AtmosphereNode {
                 if let CachedPipelineState::Ok(_) =
                     pipeline_cache.get_compute_pipeline_state(pipeline)
                 {
-                    let mut event_writer = world.resource_mut::<Events<AtmosphereUpdateEvent>>();
-                    event_writer.send(AtmosphereUpdateEvent);
+                    let mut event_writer = world.resource_mut::<Messages<AtmosphereUpdateEvent>>();
+                    event_writer.write(AtmosphereUpdateEvent);
                     self.state = AtmosphereState::Update;
                 }
             }
@@ -485,7 +486,7 @@ impl render_graph::Node for AtmosphereNode {
         render_context: &mut bevy::render::renderer::RenderContext,
         world: &World,
     ) -> Result<(), render_graph::NodeRunError> {
-        let update_events = world.resource::<Events<AtmosphereUpdateEvent>>();
+        let update_events = world.resource::<Messages<AtmosphereUpdateEvent>>();
         match self.state {
             AtmosphereState::Loading => {}
             AtmosphereState::Update => {
@@ -526,6 +527,6 @@ impl render_graph::Node for AtmosphereNode {
     }
 }
 
-fn clear_update_events(mut update_events: ResMut<Events<AtmosphereUpdateEvent>>) {
+fn clear_update_events(mut update_events: ResMut<Messages<AtmosphereUpdateEvent>>) {
     update_events.clear();
 }
