@@ -118,8 +118,31 @@ fn render_nishita(r_full: vec3<f32>, r0: vec3<f32>, p_sun_full: vec3<f32>, i_sun
         i_depth += i_step_size;
     }
 
-    // Calculate and return the final color.
-    return i_sun * (p_rlh * k_rlh * total_rlh + p_mie * k_mie * total_mie);
+    // Calculate atmospheric scattering color
+    let atmosphere_color = i_sun * (p_rlh * k_rlh * total_rlh + p_mie * k_mie * total_mie);
+
+    // Add sun disc rendering
+    // Calculate the angular distance from the ray to the sun
+    let sun_angular_radius = 0.0045; // Sun's angular size (about 0.53 degrees in radians)
+    let sun_dot = dot(r, p_sun);
+    let sun_angle = acos(clamp(sun_dot, -1.0, 1.0));
+
+    // Create a sharp sun disc with soft edge
+    var sun_disc = 0.0;
+    if sun_angle < sun_angular_radius {
+        // Core of the sun - full brightness
+        sun_disc = 1.0;
+    } else if sun_angle < sun_angular_radius * 1.5 {
+        // Soft edge falloff
+        let edge_factor = (sun_angular_radius * 1.5 - sun_angle) / (sun_angular_radius * 0.5);
+        sun_disc = smoothstep(0.0, 1.0, edge_factor);
+    }
+
+    // Sun color (warm yellow-white)
+    let sun_color = vec3<f32>(1.0, 0.95, 0.85) * i_sun * 20.0;
+
+    // Blend sun disc with atmosphere
+    return atmosphere_color + sun_color * sun_disc;
 }
 
 @group(0) @binding(0)
