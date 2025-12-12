@@ -53,6 +53,10 @@ pub struct Nishita {
     ///
     /// Controls the general direction of Mie scattering.
     pub mie_direction: f32,
+    /// Moon Intensity (Default: `0.3`).
+    ///
+    /// Controls how bright the moon disc appears. Set to 0 to disable moon.
+    pub moon_intensity: f32,
 }
 
 impl Default for Nishita {
@@ -68,6 +72,7 @@ impl Default for Nishita {
             mie_coefficient: 21e-6,
             mie_scale_height: 1.2e3,
             mie_direction: 0.758,
+            moon_intensity: 0.3,
         }
     }
 }

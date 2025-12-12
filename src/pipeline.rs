@@ -115,6 +115,9 @@ impl Plugin for AtmospherePipelinePlugin {
             RenderAssetUsages::default(),
         );
 
+        // Use nearest-neighbor sampling for pixelated/crisp look
+        image.sampler = bevy::image::ImageSampler::nearest();
+
         image.texture_view_descriptor = Some(ATMOSPHERE_CUBE_TEXTURE_VIEW_DESCRIPTOR);
 
         image.texture_descriptor = ATMOSPHERE_IMAGE_TEXTURE_DESCRIPTOR(settings.resolution);

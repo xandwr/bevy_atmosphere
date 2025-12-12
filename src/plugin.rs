@@ -1,11 +1,8 @@
 //! Provides a `Plugin` for making skyboxes with procedural sky textures.
 
 use bevy::{
-    asset::load_internal_asset,
-    camera::visibility::RenderLayers,
-    light::NotShadowCaster,
-    prelude::*,
-    render::RenderApp,
+    asset::load_internal_asset, camera::visibility::RenderLayers, light::NotShadowCaster,
+    prelude::*, render::RenderApp,
 };
 
 use crate::{

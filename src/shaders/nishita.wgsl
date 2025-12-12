@@ -10,11 +10,122 @@ struct Nishita {
     mie_coefficient: f32,
     mie_scale_height: f32,
     mie_direction: f32,
+    moon_intensity: f32,
 }
 
 const PI: f32 = 3.141592653589793;
+const TAU: f32 = 6.283185307179586;
 const ISTEPS: u32 = 16u;
 const JSTEPS: u32 = 8u;
+
+// Star field constants
+const STAR_COUNT: u32 = 1500u;
+const STAR_SEED: u32 = 0x9E3779B9u; // Golden ratio based seed for good distribution
+
+// Hash function for deterministic random numbers (based on PCG)
+fn hash_u32(state: u32) -> u32 {
+    var s = state;
+    s = s * 747796405u + 2891336453u;
+    s = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+    return (s >> 22u) ^ s;
+}
+
+// Convert hash to float in [0, 1)
+fn hash_to_float(h: u32) -> f32 {
+    return f32(h) / 4294967296.0;
+}
+
+// Generate a deterministic random direction on a sphere for star i
+fn star_direction(i: u32) -> vec3<f32> {
+    let h1 = hash_u32(i ^ STAR_SEED);
+    let h2 = hash_u32(h1);
+
+    // Use spherical coordinates with uniform distribution
+    let theta = hash_to_float(h1) * TAU;
+    let phi = acos(2.0 * hash_to_float(h2) - 1.0);
+
+    return vec3<f32>(
+        sin(phi) * cos(theta),
+        sin(phi) * sin(theta),
+        cos(phi)
+    );
+}
+
+// Get star brightness (varied for visual interest)
+fn star_brightness(i: u32) -> f32 {
+    let h = hash_u32(i ^ 0x85EBCA6Bu); // Different seed for brightness
+    let base = hash_to_float(h);
+    // Power distribution: many dim stars, few bright ones
+    return pow(base, 2.0) * 0.8 + 0.2;
+}
+
+// Get star color temperature variation
+fn star_color(i: u32) -> vec3<f32> {
+    let h = hash_u32(i ^ 0xC2B2AE35u); // Different seed for color
+    let temp = hash_to_float(h);
+
+    // Vary from blue-white to yellow-white
+    if temp < 0.3 {
+        // Blue-white stars
+        return vec3<f32>(0.8, 0.85, 1.0);
+    } else if temp < 0.7 {
+        // White stars
+        return vec3<f32>(1.0, 1.0, 1.0);
+    } else {
+        // Yellow-white stars
+        return vec3<f32>(1.0, 0.95, 0.8);
+    }
+}
+
+// Render stars for a given ray direction
+fn render_stars(ray: vec3<f32>, sun_y: f32) -> vec3<f32> {
+    // Night factor: stars only visible when sun is below horizon
+    // Fade in between sun_y = 0.1 and sun_y = -0.2
+    let night_factor = smoothstep(0.1, -0.2, sun_y);
+
+    if night_factor <= 0.0 {
+        return vec3<f32>(0.0);
+    }
+
+    let r = normalize(ray);
+    var star_contribution = vec3<f32>(0.0);
+
+    // Angular size of stars (in radians, very small for crisp points)
+    let star_radius = 0.0012;
+
+    for (var i = 0u; i < STAR_COUNT; i++) {
+        let star_dir = star_direction(i);
+
+        // Skip stars below horizon
+        if star_dir.y < -0.1 {
+            continue;
+        }
+
+        // Calculate angular distance to this star
+        let cos_angle = dot(r, star_dir);
+
+        // Quick rejection for stars not in view
+        if cos_angle < 0.99 {
+            continue;
+        }
+
+        let angle = acos(clamp(cos_angle, -1.0, 1.0));
+
+        // Star point with soft falloff
+        if angle < star_radius {
+            let brightness = star_brightness(i);
+            let color = star_color(i);
+
+            // Soft circular falloff
+            let falloff = 1.0 - (angle / star_radius);
+            let intensity = falloff * falloff * brightness;
+
+            star_contribution += color * intensity * 2.0;
+        }
+    }
+
+    return star_contribution * night_factor;
+}
 
 fn rsi(rd: vec3<f32>, r0: vec3<f32>, sr: f32) -> vec2<f32> {
     // ray-sphere intersection that assumes
@@ -35,7 +146,7 @@ fn rsi(rd: vec3<f32>, r0: vec3<f32>, sr: f32) -> vec2<f32> {
     }
 }
 
-fn render_nishita(r_full: vec3<f32>, r0: vec3<f32>, p_sun_full: vec3<f32>, i_sun: f32, r_planet: f32, r_atmos: f32, k_rlh: vec3<f32>, k_mie: f32, sh_rlh: f32, sh_mie: f32, g: f32) -> vec3<f32> {
+fn render_nishita(r_full: vec3<f32>, r0: vec3<f32>, p_sun_full: vec3<f32>, i_sun: f32, r_planet: f32, r_atmos: f32, k_rlh: vec3<f32>, k_mie: f32, sh_rlh: f32, sh_mie: f32, g: f32, i_moon: f32) -> vec3<f32> {
     // Normalize the ray direction and sun position.
     let r = normalize(r_full);
     let p_sun = normalize(p_sun_full);
@@ -142,7 +253,44 @@ fn render_nishita(r_full: vec3<f32>, r0: vec3<f32>, p_sun_full: vec3<f32>, i_sun
     let sun_color = vec3<f32>(1.0, 0.95, 0.85) * i_sun * 20.0;
 
     // Blend sun disc with atmosphere
-    return atmosphere_color + sun_color * sun_disc;
+    var final_color = atmosphere_color + sun_color * sun_disc;
+
+    // Moon rendering (opposite the sun)
+    if i_moon > 0.0 {
+        let p_moon = -p_sun; // Moon is opposite the sun
+        let moon_angular_radius = 0.0046; // Slightly larger than sun for visual interest
+        let moon_dot = dot(r, p_moon);
+        let moon_angle = acos(clamp(moon_dot, -1.0, 1.0));
+
+        var moon_disc = 0.0;
+        if moon_angle < moon_angular_radius {
+            // Core of the moon - full brightness
+            moon_disc = 1.0;
+        } else if moon_angle < moon_angular_radius * 1.3 {
+            // Soft edge falloff (slightly sharper than sun)
+            let edge_factor = (moon_angular_radius * 1.3 - moon_angle) / (moon_angular_radius * 0.3);
+            moon_disc = smoothstep(0.0, 1.0, edge_factor);
+        }
+
+        // Moon color (pale silvery white with slight blue tint)
+        let moon_color = vec3<f32>(0.85, 0.88, 0.95) * i_moon;
+
+        // Add subtle moon glow
+        let glow_radius = moon_angular_radius * 4.0;
+        var moon_glow = 0.0;
+        if moon_angle < glow_radius {
+            moon_glow = pow(1.0 - moon_angle / glow_radius, 2.0) * 0.15;
+        }
+        let glow_color = vec3<f32>(0.7, 0.75, 0.85) * i_moon * moon_glow;
+
+        final_color += moon_color * moon_disc + glow_color;
+    }
+
+    // Add procedural stars (only visible at night)
+    let stars = render_stars(r, p_sun.y);
+    final_color += stars;
+
+    return final_color;
 }
 
 @group(0) @binding(0)
@@ -193,6 +341,7 @@ fn main(@builtin(global_invocation_id) invocation_id: vec3<u32>, @builtin(num_wo
         nishita.rayleigh_scale_height,
         nishita.mie_scale_height,
         nishita.mie_direction,
+        nishita.moon_intensity,
     );
 
     textureStore(
